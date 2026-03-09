@@ -41,7 +41,8 @@ def get_client():
 def get_products_for_competitor(client: Any, competitor: str) -> list[dict]:
     """Fetch all products that have a URL for the given competitor."""
     url_col = f"{competitor}_url"
-    id_col = f"{competitor}_product_id"
+    # Amazon uses 'amazon_asin' instead of 'amazon_product_id'
+    id_col = "amazon_asin" if competitor == "amazon" else f"{competitor}_product_id"
     rows = []
     page_size = 1000
     start = 0
