@@ -1,0 +1,45 @@
+name: Daily Price Scrape
+
+on:
+  schedule:
+    # 3 AM UTC = 6 AM Riyadh (AST/UTC+3)
+    - cron: '0 3 * * *'
+  workflow_dispatch:  # Manual trigger
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: pip install -r scraper/requirements.txt
+
+      - name: Run scrapers
+        working-directory: scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python main.py
+
+      - name: Trigger email digest
+        if: success()
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          curl -s -X POST \
+            "${{ secrets.SUPABASE_URL }}/functions/v1/daily-digest" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_SERVICE_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' \
+            --max-time 30 || echo "Email digest trigger failed (non-fatal)"
