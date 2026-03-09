@@ -13,10 +13,14 @@ import re
 import sys
 import logging
 
-import openpyxl
-from supabase import create_client
+import os
 
-from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, DB_BATCH_SIZE
+import httpx
+import openpyxl
+
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
+SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+DB_BATCH_SIZE = 500
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -47,11 +51,16 @@ def extract_lulu_product_id(url: str | None) -> str | None:
     return m.group(1) if m else None
 
 
+_NA_VALUES = {"na", "n/a", "#n/a", "#na", "none", "null", "-", ""}
+
+
 def clean_str(val) -> str | None:
-    """Clean cell value to string or None."""
+    """Clean cell value to string or None. Treats NA-like values as None."""
     if val is None:
         return None
     s = str(val).strip()
+    if s.lower() in _NA_VALUES:
+        return None
     return s if s else None
 
 
@@ -67,23 +76,29 @@ def parse_excel(filepath: str) -> dict[str, dict]:
         {
             "name": "Amazon Now",
             "competitor": "amazon",
-            "sku_col": "sku",
-            "link_col": "competitor mapping link",
-            "comp_sku_col": "competitor sku",
+            "link_col": "correct amazon now mapping link",
+            "comp_sku_col": "correct amazon now sku",
+            "title_col": "title",
+            "brand_col": "brand",
+            "top_col": "top 2500",
         },
         {
             "name": "Ninja",
             "competitor": "ninja",
-            "sku_col": "sku",
-            "link_col": "competitor mapping link",
-            "comp_sku_col": "competitor sku",
+            "link_col": "correct ninja mapping link",
+            "comp_sku_col": "correct ninja sku id",
+            "title_col": "product_title",
+            "brand_col": "brand",
+            "top_col": "top 2500 sku",
         },
         {
             "name": "Lulu",
             "competitor": "lulu",
-            "sku_col": "sku",
-            "link_col": "competitor mapping link",
-            "comp_sku_col": "competitor sku",
+            "link_col": "correct lulu mapping link",
+            "comp_sku_col": "correct lulu sku id",
+            "title_col": "product_title",
+            "brand_col": "brand_code",
+            "top_col": "top 2500",
         },
     ]
 
@@ -118,10 +133,10 @@ def parse_excel(filepath: str) -> dict[str, dict]:
             if sku not in products:
                 products[sku] = {
                     "sku": sku,
-                    "title": clean_str(get_cell(row, "title")) or "",
+                    "title": clean_str(get_cell(row, cfg["title_col"])) or "",
                     "category": clean_str(get_cell(row, "category")),
-                    "brand": clean_str(get_cell(row, "brand")),
-                    "is_top_2500": str(get_cell(row, "top 2500")).strip().lower() in ("yes", "true", "1"),
+                    "brand": clean_str(get_cell(row, cfg["brand_col"])),
+                    "is_top_2500": str(get_cell(row, cfg["top_col"])).strip().lower() in ("yes", "true", "1"),
                     "noon_debugger_url": clean_str(get_cell(row, "debuger link")),
                 }
 
@@ -148,17 +163,39 @@ def parse_excel(filepath: str) -> dict[str, dict]:
     return products
 
 
-def upload_to_supabase(products: dict[str, dict]) -> None:
-    """Upload all products to pm_products table."""
-    client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    rows = list(products.values())
+ALL_KEYS = [
+    "sku", "title", "category", "brand", "is_top_2500", "noon_debugger_url",
+    "amazon_sku", "amazon_url", "amazon_asin",
+    "ninja_sku", "ninja_url", "ninja_product_id",
+    "lulu_sku", "lulu_url", "lulu_product_id",
+]
 
+
+def upload_to_supabase(products: dict[str, dict]) -> None:
+    """Upload all products to pm_products table via REST API."""
+    # Normalize: every row must have the same keys for PostgREST
+    rows = []
+    for p in products.values():
+        row = {k: p.get(k) for k in ALL_KEYS}
+        rows.append(row)
     logger.info(f"Uploading {len(rows)} unique products to Supabase...")
 
-    for i in range(0, len(rows), DB_BATCH_SIZE):
-        batch = rows[i : i + DB_BATCH_SIZE]
-        client.table("pm_products").upsert(batch, on_conflict="sku").execute()
-        logger.info(f"Uploaded {min(i + DB_BATCH_SIZE, len(rows))}/{len(rows)}")
+    headers = {
+        "apikey": SUPABASE_SERVICE_KEY,
+        "Authorization": f"Bearer {SUPABASE_SERVICE_KEY}",
+        "Content-Type": "application/json",
+        "Prefer": "resolution=merge-duplicates",
+    }
+    url = f"{SUPABASE_URL}/rest/v1/pm_products?on_conflict=sku"
+
+    with httpx.Client(timeout=60) as client:
+        for i in range(0, len(rows), DB_BATCH_SIZE):
+            batch = rows[i : i + DB_BATCH_SIZE]
+            resp = client.post(url, json=batch, headers=headers)
+            if resp.status_code not in (200, 201):
+                logger.error(f"Batch {i} failed: {resp.status_code} {resp.text[:200]}")
+            else:
+                logger.info(f"Uploaded {min(i + DB_BATCH_SIZE, len(rows))}/{len(rows)}")
 
     logger.info("Upload complete!")
 

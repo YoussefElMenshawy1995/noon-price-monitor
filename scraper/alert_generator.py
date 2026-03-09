@@ -7,16 +7,17 @@ from __future__ import annotations
 
 import logging
 from datetime import date, timedelta
+from typing import Any
 
-from supabase import Client
+import httpx
 
-from config import PRICE_CHANGE_THRESHOLD_PCT
-from db import insert_alerts
+from config import SUPABASE_URL, SUPABASE_SERVICE_KEY, PRICE_CHANGE_THRESHOLD_PCT
+from db import insert_alerts, _headers, _rest_url
 
 logger = logging.getLogger(__name__)
 
 
-def generate_alerts(client: Client) -> int:
+def generate_alerts(client: Any) -> int:
     """
     Compare today's snapshots vs yesterday's for each product/competitor.
     Generate alerts for significant changes.
@@ -26,47 +27,51 @@ def generate_alerts(client: Client) -> int:
     yesterday = (date.today() - timedelta(days=1)).isoformat()
 
     # Get today's successful snapshots
-    today_resp = (
-        client.table("pm_price_snapshots")
-        .select("product_id, competitor, price, in_stock, promo_label")
-        .eq("scrape_date", today)
-        .eq("scrape_status", "success")
-        .execute()
+    resp = client.get(
+        _rest_url("pm_price_snapshots"),
+        params={
+            "select": "product_id,competitor,price,in_stock,promo_label",
+            "scrape_date": f"eq.{today}",
+            "scrape_status": "eq.success",
+        },
+        headers=_headers(),
     )
-    today_data = {(r["product_id"], r["competitor"]): r for r in today_resp.data}
+    today_data = {(r["product_id"], r["competitor"]): r for r in (resp.json() if resp.status_code == 200 else [])}
 
     # Get yesterday's successful snapshots
-    yesterday_resp = (
-        client.table("pm_price_snapshots")
-        .select("product_id, competitor, price, in_stock, promo_label")
-        .eq("scrape_date", yesterday)
-        .eq("scrape_status", "success")
-        .execute()
+    resp = client.get(
+        _rest_url("pm_price_snapshots"),
+        params={
+            "select": "product_id,competitor,price,in_stock,promo_label",
+            "scrape_date": f"eq.{yesterday}",
+            "scrape_status": "eq.success",
+        },
+        headers=_headers(),
     )
-    yesterday_data = {(r["product_id"], r["competitor"]): r for r in yesterday_resp.data}
-
-    # Get latest Noon prices for undercut detection
-    noon_resp = (
-        client.rpc("pm_get_price_position_summary")
-        .execute()
-    )
+    yesterday_data = {(r["product_id"], r["competitor"]): r for r in (resp.json() if resp.status_code == 200 else [])}
 
     # Build a quick product_id -> noon_price map from pm_noon_prices
-    noon_prices_resp = (
-        client.table("pm_noon_prices")
-        .select("product_id, price")
-        .eq("price_date", today)
-        .execute()
+    resp = client.get(
+        _rest_url("pm_noon_prices"),
+        params={
+            "select": "product_id,price",
+            "price_date": f"eq.{today}",
+        },
+        headers=_headers(),
     )
+    noon_data = resp.json() if resp.status_code == 200 else []
     # Fallback to yesterday if no today prices
-    if not noon_prices_resp.data:
-        noon_prices_resp = (
-            client.table("pm_noon_prices")
-            .select("product_id, price")
-            .eq("price_date", yesterday)
-            .execute()
+    if not noon_data:
+        resp = client.get(
+            _rest_url("pm_noon_prices"),
+            params={
+                "select": "product_id,price",
+                "price_date": f"eq.{yesterday}",
+            },
+            headers=_headers(),
         )
-    noon_price_map = {r["product_id"]: r["price"] for r in noon_prices_resp.data}
+        noon_data = resp.json() if resp.status_code == 200 else []
+    noon_price_map = {r["product_id"]: r["price"] for r in noon_data}
 
     alerts = []
 
