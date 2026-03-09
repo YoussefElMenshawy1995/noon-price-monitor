@@ -92,11 +92,15 @@ class BaseScraper(ABC):
                 )
                 if resp.status_code == 200:
                     return resp
-                elif resp.status_code == 503 or resp.status_code == 429:
+                elif resp.status_code in (503, 429):
                     logger.warning(f"Rate limited ({resp.status_code}) on {url}, attempt {attempt + 1}")
                     await asyncio.sleep(5 * (attempt + 1))
                 elif resp.status_code == 404:
                     return resp  # Let the parser handle 404
+                elif resp.status_code == 403:
+                    logger.warning(f"HTTP 403 on {url}")
+                    resp._status_code = 403  # preserve for caller
+                    return resp  # Return so caller can mark as blocked
                 else:
                     logger.warning(f"HTTP {resp.status_code} on {url}")
             except (httpx.TimeoutException, httpx.ConnectError, httpx.ReadError) as e:
@@ -121,6 +125,15 @@ class BaseScraper(ABC):
         url = product.get(url_key, "")
         product_id = product["id"]
 
+        # Skip invalid URLs (relative paths, empty, non-http)
+        if not url or not url.startswith(("http://", "https://")):
+            self.failed_count += 1
+            return ScrapeResult(
+                product_id=product_id,
+                competitor=self.competitor,
+                scrape_status="failed",
+            )
+
         async with self._semaphore:
             await self._delay()
             resp = await self._fetch(client, url)
@@ -140,6 +153,14 @@ class BaseScraper(ABC):
                     competitor=self.competitor,
                     scrape_status="not_found",
                     in_stock=False,
+                )
+
+            if resp.status_code == 403:
+                self.blocked_count += 1
+                return ScrapeResult(
+                    product_id=product_id,
+                    competitor=self.competitor,
+                    scrape_status="blocked",
                 )
 
             html = resp.text
