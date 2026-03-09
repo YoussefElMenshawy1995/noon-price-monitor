@@ -6,11 +6,27 @@ import * as sample from "@/lib/sample-data";
 import { formatSAR } from "@/lib/utils";
 import Link from "next/link";
 
+type Competitor = "all" | "amazon" | "ninja" | "lulu";
+
+const COMPETITOR_LABELS: Record<Competitor, string> = {
+  all: "All Competitors",
+  amazon: "Amazon",
+  ninja: "Ninja",
+  lulu: "Lulu",
+};
+
+const COMPETITOR_COLORS: Record<string, string> = {
+  amazon: "text-orange-500",
+  ninja: "text-emerald-600",
+  lulu: "text-rose-600",
+};
+
 export default function ComparePage() {
   const [allProducts, setAllProducts] = useState<sample.Product[]>(sample.getProducts());
   const [categories, setCategories] = useState<string[]>(sample.getCategories());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
+  const [competitor, setCompetitor] = useState<Competitor>("all");
   const [showTopOnly, setShowTopOnly] = useState(false);
 
   useEffect(() => {
@@ -24,13 +40,21 @@ export default function ComparePage() {
     if (search && !p.title.toLowerCase().includes(search.toLowerCase()) && !p.sku.toLowerCase().includes(search.toLowerCase())) return false;
     if (category && p.category !== category) return false;
     if (showTopOnly && !p.isTop2500) return false;
+    // When a specific competitor is selected, only show products that have a price for it
+    if (competitor === "amazon" && p.amazonPrice === null) return false;
+    if (competitor === "ninja" && p.ninjaPrice === null) return false;
+    if (competitor === "lulu" && p.luluPrice === null) return false;
     return true;
   });
+
+  const showAmazon = competitor === "all" || competitor === "amazon";
+  const showNinja = competitor === "all" || competitor === "ninja";
+  const showLulu = competitor === "all" || competitor === "lulu";
 
   return (
     <div>
       <h1 className="text-2xl font-bold text-gray-900 mb-1">Price Comparison</h1>
-      <p className="text-sm text-gray-500 mb-5">Compare Noon Minutes prices against Amazon, Ninja, and Lulu</p>
+      <p className="text-sm text-gray-500 mb-5">Compare Noon Minutes prices against competitors</p>
 
       {/* Filters */}
       <div className="bg-white rounded-xl shadow-sm border p-4 mb-4 flex items-center gap-4 flex-wrap">
@@ -41,6 +65,15 @@ export default function ComparePage() {
           onChange={(e) => setSearch(e.target.value)}
           className="border rounded-lg px-3 py-2 text-sm w-72 focus:outline-none focus:ring-2 focus:ring-amber-400"
         />
+        <select
+          value={competitor}
+          onChange={(e) => setCompetitor(e.target.value as Competitor)}
+          className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+        >
+          {(Object.keys(COMPETITOR_LABELS) as Competitor[]).map((c) => (
+            <option key={c} value={c}>{COMPETITOR_LABELS[c]}</option>
+          ))}
+        </select>
         <select
           value={category}
           onChange={(e) => setCategory(e.target.value)}
@@ -69,23 +102,33 @@ export default function ComparePage() {
                 <th className="px-4 py-3 font-semibold text-right">
                   <span className="text-amber-600">Noon</span>
                 </th>
-                <th className="px-4 py-3 font-semibold text-right">
-                  <span className="text-orange-500">Amazon</span>
-                </th>
-                <th className="px-4 py-3 font-semibold text-right">
-                  <span className="text-emerald-600">Ninja</span>
-                </th>
-                <th className="px-4 py-3 font-semibold text-right">
-                  <span className="text-rose-600">Lulu</span>
-                </th>
+                {showAmazon && (
+                  <th className="px-4 py-3 font-semibold text-right">
+                    <span className={COMPETITOR_COLORS.amazon}>Amazon</span>
+                  </th>
+                )}
+                {showNinja && (
+                  <th className="px-4 py-3 font-semibold text-right">
+                    <span className={COMPETITOR_COLORS.ninja}>Ninja</span>
+                  </th>
+                )}
+                {showLulu && (
+                  <th className="px-4 py-3 font-semibold text-right">
+                    <span className={COMPETITOR_COLORS.lulu}>Lulu</span>
+                  </th>
+                )}
                 <th className="px-4 py-3 font-semibold text-center">Status</th>
                 <th className="px-4 py-3 font-semibold text-right">Gap</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map((p) => {
-                const compPrices = [p.amazonPrice, p.ninjaPrice, p.luluPrice].filter(Boolean) as number[];
-                const cheapest = compPrices.length > 0 ? Math.min(...compPrices) : null;
+                // Compute cheapest among visible competitors only
+                const visiblePrices: number[] = [];
+                if (showAmazon && p.amazonPrice != null) visiblePrices.push(p.amazonPrice);
+                if (showNinja && p.ninjaPrice != null) visiblePrices.push(p.ninjaPrice);
+                if (showLulu && p.luluPrice != null) visiblePrices.push(p.luluPrice);
+                const cheapest = visiblePrices.length > 0 ? Math.min(...visiblePrices) : null;
                 const noonIsCheapest = p.noonPrice !== null && cheapest !== null && p.noonPrice <= cheapest;
                 const gap = p.noonPrice && cheapest ? ((p.noonPrice - cheapest) / p.noonPrice) * 100 : null;
 
@@ -99,9 +142,15 @@ export default function ComparePage() {
                     </td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{p.category}</td>
                     <td className="px-4 py-3 text-right font-mono font-medium">{formatSAR(p.noonPrice)}</td>
-                    <PriceCell price={p.amazonPrice} inStock={p.amazonInStock} promo={p.amazonPromo} noonPrice={p.noonPrice} />
-                    <PriceCell price={p.ninjaPrice} inStock={p.ninjaInStock} promo={p.ninjaPromo} noonPrice={p.noonPrice} />
-                    <PriceCell price={p.luluPrice} inStock={p.luluInStock} promo={p.luluPromo} noonPrice={p.noonPrice} />
+                    {showAmazon && (
+                      <PriceCell price={p.amazonPrice} inStock={p.amazonInStock} promo={p.amazonPromo} noonPrice={p.noonPrice} />
+                    )}
+                    {showNinja && (
+                      <PriceCell price={p.ninjaPrice} inStock={p.ninjaInStock} promo={p.ninjaPromo} noonPrice={p.noonPrice} />
+                    )}
+                    {showLulu && (
+                      <PriceCell price={p.luluPrice} inStock={p.luluInStock} promo={p.luluPromo} noonPrice={p.noonPrice} />
+                    )}
                     <td className="px-4 py-3 text-center">
                       {noonIsCheapest ? (
                         <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">Cheapest</span>

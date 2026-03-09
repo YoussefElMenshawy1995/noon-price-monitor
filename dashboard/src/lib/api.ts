@@ -192,7 +192,8 @@ export async function getCategories(): Promise<string[]> {
       .from("pm_products")
       .select("category")
       .not("category", "is", null)
-      .order("category");
+      .order("category")
+      .limit(15000);
 
     if (!data || data.length === 0) return sample.getCategories();
     const unique = [
