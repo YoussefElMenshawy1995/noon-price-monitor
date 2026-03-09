@@ -44,7 +44,7 @@ SCRAPERS = {
 DEFAULT_ORDER = ["ninja", "lulu", "amazon"]
 
 
-async def run_scraper(competitor: str) -> dict:
+async def run_scraper(competitor: str, limit: int = 0, offset: int = 0) -> dict:
     """Run a single competitor scraper end-to-end."""
     client = get_client()
     scraper_cls = SCRAPERS[competitor]
@@ -55,6 +55,18 @@ async def run_scraper(competitor: str) -> dict:
     if not products:
         logger.warning(f"No products found for {competitor}, skipping")
         return {"competitor": competitor, "skipped": True}
+
+    # Apply offset and limit for batched runs
+    if offset > 0:
+        products = products[offset:]
+    if limit > 0:
+        products = products[:limit]
+
+    if not products:
+        logger.warning(f"No products in range (offset={offset}, limit={limit}), skipping")
+        return {"competitor": competitor, "skipped": True}
+
+    logger.info(f"[{competitor}] Scraping {len(products)} products (offset={offset}, limit={limit or 'all'})")
 
     # Create scrape run record
     run_id = create_scrape_run(client, competitor, len(products))
@@ -118,6 +130,18 @@ async def main():
         choices=["amazon", "ninja", "lulu"],
         help="Run a single competitor only",
     )
+    parser.add_argument(
+        "--limit",
+        type=int,
+        default=0,
+        help="Limit number of products to scrape (0 = all)",
+    )
+    parser.add_argument(
+        "--offset",
+        type=int,
+        default=0,
+        help="Skip first N products (for batched runs)",
+    )
     args = parser.parse_args()
 
     competitors = [args.competitor] if args.competitor else DEFAULT_ORDER
@@ -127,7 +151,7 @@ async def main():
 
     results = []
     for competitor in competitors:
-        result = await run_scraper(competitor)
+        result = await run_scraper(competitor, limit=args.limit, offset=args.offset)
         results.append(result)
 
     # Generate alerts after all scrapers finish
