@@ -68,7 +68,7 @@ export default function ScrapeStatusPage() {
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(5)} />
             <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
-            <Tooltip formatter={(v: number) => `${v}%`} />
+            <Tooltip formatter={(v) => `${v}%`} />
             <Legend />
             <Bar dataKey="amazon" fill="#FF9900" name="Amazon" radius={[2, 2, 0, 0]} />
             <Bar dataKey="ninja" fill="#10B981" name="Ninja" radius={[2, 2, 0, 0]} />

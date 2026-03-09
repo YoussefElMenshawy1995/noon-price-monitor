@@ -66,7 +66,7 @@ export default function OverviewPage() {
                   <Cell key={i} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(v: number) => `${v}%`} />
+              <Tooltip formatter={(v) => `${v}%`} />
             </PieChart>
           </ResponsiveContainer>
           <div className="flex justify-center gap-4 mt-2">
@@ -86,7 +86,7 @@ export default function OverviewPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(5)} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
-              <Tooltip formatter={(v: number) => `${v}%`} />
+              <Tooltip formatter={(v) => `${v}%`} />
               <Line type="monotone" dataKey="noonCheapestPct" stroke="#F59E0B" strokeWidth={2} dot={false} name="Noon Cheapest %" />
             </LineChart>
           </ResponsiveContainer>
@@ -101,7 +101,7 @@ export default function OverviewPage() {
               <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
               <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}%`} />
               <YAxis type="category" dataKey="category" tick={{ fontSize: 11 }} width={100} />
-              <Tooltip formatter={(v: number) => `${v}%`} />
+              <Tooltip formatter={(v) => `${v}%`} />
               <Bar dataKey="undercutPct" fill="#EF4444" radius={[0, 4, 4, 0]} name="Undercut %" />
             </BarChart>
           </ResponsiveContainer>

@@ -89,7 +89,7 @@ export default function ProductDetailPage({ params }: { params: Promise<{ id: st
             <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
             <XAxis dataKey="date" tick={{ fontSize: 10 }} tickFormatter={(d: string) => d.slice(5)} />
             <YAxis tick={{ fontSize: 11 }} tickFormatter={(v: number) => `${v}`} domain={["auto", "auto"]} />
-            <Tooltip formatter={(v: number) => `SAR ${v.toFixed(2)}`} />
+            <Tooltip formatter={(v) => `SAR ${Number(v).toFixed(2)}`} />
             <Legend />
             <Line type="monotone" dataKey="noon" stroke="#F59E0B" strokeWidth={2} dot={false} name="Noon" />
             <Line type="monotone" dataKey="amazon" stroke="#FF9900" strokeWidth={2} dot={false} name="Amazon" />

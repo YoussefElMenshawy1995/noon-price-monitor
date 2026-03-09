@@ -82,7 +82,7 @@ export async function getProducts(options?: {
 }
 
 export async function getProduct(id: string) {
-  if (!isSupabaseConfigured()) return sample.getProduct(id);
+  if (!isSupabaseConfigured()) return sample.getProduct(Number(id));
 
   const { data } = await supabase
     .from("pm_latest_prices")
@@ -110,7 +110,7 @@ export async function getCategories() {
 // ─── Price History ──────────────────────────────────────────
 
 export async function getPriceHistory(productId: string, days = 30) {
-  if (!isSupabaseConfigured()) return sample.getPriceHistory(productId);
+  if (!isSupabaseConfigured()) return sample.getPriceHistory(Number(productId));
 
   const sinceDate = new Date();
   sinceDate.setDate(sinceDate.getDate() - days);
