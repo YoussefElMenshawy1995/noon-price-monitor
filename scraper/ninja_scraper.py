@@ -19,7 +19,7 @@ import re
 from selectolax.parser import HTMLParser
 
 from base_scraper import BaseScraper, ScrapeResult
-from config import NINJA_CONCURRENCY, NINJA_DELAY_MIN, NINJA_DELAY_MAX
+from config import NINJA_CONCURRENCY, NINJA_DELAY_MIN, NINJA_DELAY_MAX, BASE_HEADERS
 
 logger = logging.getLogger(__name__)
 
@@ -38,6 +38,17 @@ class NinjaScraper(BaseScraper):
     concurrency = NINJA_CONCURRENCY
     delay_min = NINJA_DELAY_MIN
     delay_max = NINJA_DELAY_MAX
+
+    def _get_headers(self) -> dict[str, str]:
+        """Override to exclude Brotli from Accept-Encoding.
+
+        ananinja.com returns a minimal Next.js shell (no product data)
+        when Accept-Encoding includes 'br'.  Using gzip/deflate only
+        gives us the full SSR page with prices.
+        """
+        headers = super()._get_headers()
+        headers["Accept-Encoding"] = "gzip, deflate"
+        return headers
 
     def is_blocked(self, html: str) -> bool:
         lower = html.lower()
