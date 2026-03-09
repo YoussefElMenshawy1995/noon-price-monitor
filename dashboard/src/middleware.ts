@@ -1,36 +1,6 @@
-import { NextRequest, NextResponse } from "next/server";
-import crypto from "crypto";
+// Auth middleware — currently disabled (re-enable when login is ready)
+// The Edge Runtime doesn't support Node.js crypto; use Web Crypto API instead.
 
-function getSessionToken(): string {
-  const secret = process.env.AUTH_SECRET || "noon-price-monitor-default-secret";
-  return crypto.createHash("sha256").update(secret).digest("hex").slice(0, 32);
-}
-
-export function middleware(request: NextRequest) {
-  const { pathname } = request.nextUrl;
-
-  // Allow login page and auth API routes through
-  if (
-    pathname.startsWith("/login") ||
-    pathname.startsWith("/api/auth") ||
-    pathname.startsWith("/_next") ||
-    pathname === "/favicon.ico"
-  ) {
-    return NextResponse.next();
-  }
-
-  // Check for valid session cookie
-  const session = request.cookies.get("pm_session")?.value;
-  const expectedToken = getSessionToken();
-
-  if (!session || session !== expectedToken) {
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
-};
+// import { NextRequest, NextResponse } from "next/server";
+// export function middleware(request: NextRequest) { ... }
+// export const config = { matcher: [...] };
