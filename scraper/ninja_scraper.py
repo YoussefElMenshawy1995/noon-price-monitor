@@ -1,18 +1,36 @@
 """
-Ninja (ananinja.com) scraper — JSON-LD preferred, CSS fallback.
+Ninja (ananinja.com) scraper.
+
+The site is a Next.js RSC app. JSON-LD is embedded inside
+self.__next_f.push() calls, NOT in standard <script type="application/ld+json">
+tags.  We extract prices using three strategies:
+
+1. RSC-embedded JSON-LD  ("price": XX.XX inside __next_f.push chunks)
+2. Embedded product data  ("priceCents": XXXX)
+3. Visible HTML price tags (CSS selectors)
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 
 from selectolax.parser import HTMLParser
 
-from base_scraper import BaseScraper, ScrapeResult, parse_json_ld, extract_price_from_json_ld
+from base_scraper import BaseScraper, ScrapeResult
 from config import NINJA_CONCURRENCY, NINJA_DELAY_MIN, NINJA_DELAY_MAX
 
 logger = logging.getLogger(__name__)
+
+# ── regex patterns compiled once ─────────────────────────────
+_RE_RSC_PRICE = re.compile(
+    r'"@type"\s*:\s*"Offer".*?"price"\s*:\s*(\d+(?:\.\d+)?)', re.DOTALL
+)
+_RE_RSC_AVAIL = re.compile(r'"availability"\s*:\s*"([^"]+)"')
+_RE_PRICE_CENTS = re.compile(r'"priceCents"\s*:\s*(\d+)')
+_RE_ORIG_PRICE_CENTS = re.compile(r'"originalPriceCents"\s*:\s*(\d+)')
+_RE_DISC_PRICE_CENTS = re.compile(r'"discountedPriceCents"\s*:\s*(\d+)')
 
 
 class NinjaScraper(BaseScraper):
@@ -35,31 +53,50 @@ class NinjaScraper(BaseScraper):
             competitor="ninja",
         )
 
-        # Try JSON-LD first (most reliable)
-        json_ld = parse_json_ld(html)
-        if json_ld:
-            price, original_price = extract_price_from_json_ld(json_ld)
-            result.price = price
-            result.original_price = original_price
+        # ── Strategy 1: RSC-embedded JSON-LD ─────────────────
+        # Ninja uses Next.js RSC; JSON-LD lives inside self.__next_f.push() chunks
+        m = _RE_RSC_PRICE.search(html)
+        if m:
+            result.price = float(m.group(1))
 
-            # Check availability from JSON-LD
-            offers = json_ld.get("offers", {})
-            if isinstance(offers, list):
-                offers = offers[0] if offers else {}
-            availability = offers.get("availability", "")
-            if "OutOfStock" in availability:
-                result.in_stock = False
+        avail = _RE_RSC_AVAIL.search(html)
+        if avail and "OutOfStock" in avail.group(1):
+            result.in_stock = False
 
-        # CSS fallback if JSON-LD didn't give us a price
-        tree = HTMLParser(html)
-
+        # ── Strategy 2: priceCents from embedded product JSON ─
         if result.price is None:
-            # Try common Ninja price selectors
+            mc = _RE_PRICE_CENTS.search(html)
+            if mc:
+                cents = int(mc.group(1))
+                if cents > 0:
+                    result.price = cents / 100.0
+
+        # originalPriceCents for original price
+        if result.original_price is None:
+            mo = _RE_ORIG_PRICE_CENTS.search(html)
+            if mo:
+                orig_cents = int(mo.group(1))
+                if orig_cents > 0:
+                    result.original_price = orig_cents / 100.0
+
+        # discountedPriceCents — if non-zero, this is the sale price
+        md = _RE_DISC_PRICE_CENTS.search(html)
+        if md:
+            disc_cents = int(md.group(1))
+            if disc_cents > 0:
+                # discountedPriceCents is the sale price; priceCents is original
+                result.original_price = result.price
+                result.price = disc_cents / 100.0
+
+        # ── Strategy 3: CSS fallback on visible HTML ──────────
+        if result.price is None:
+            tree = HTMLParser(html)
             for selector in [
+                "p.text-lg.text-gray-500",
+                "p.text-lg.leading-4",
+                "h2.text-lg span p",
                 "[data-testid='product-price']",
                 ".product-price",
-                ".price-current",
-                ".pdp-price",
                 "span.price",
             ]:
                 node = tree.css_first(selector)
@@ -68,63 +105,13 @@ class NinjaScraper(BaseScraper):
                     if result.price:
                         break
 
-        # Original price (strikethrough)
-        if result.original_price is None:
-            for selector in [
-                "[data-testid='product-original-price']",
-                ".price-old",
-                ".price-was",
-                "del .price",
-                "s .price",
-            ]:
-                node = tree.css_first(selector)
-                if node:
-                    op = self._parse_price(node.text())
-                    if op and op != result.price:
-                        result.original_price = op
-                        break
-
-        # Discount
+        # ── Discount calculation ──────────────────────────────
         if result.price and result.original_price and result.original_price > result.price:
             result.discount_pct = round(
                 (result.original_price - result.price) / result.original_price * 100, 1
             )
 
-        # Availability (CSS fallback)
-        for selector in [
-            "[data-testid='out-of-stock']",
-            ".out-of-stock",
-            ".sold-out",
-        ]:
-            node = tree.css_first(selector)
-            if node:
-                result.in_stock = False
-                result.availability_text = node.text(strip=True)[:200]
-                break
-
-        # Delivery text
-        for selector in [
-            "[data-testid='delivery-info']",
-            ".delivery-info",
-            ".delivery-estimate",
-        ]:
-            node = tree.css_first(selector)
-            if node:
-                result.delivery_text = node.text(strip=True)[:200]
-                break
-
-        # Promo label
-        for selector in [
-            "[data-testid='promo-badge']",
-            ".promo-badge",
-            ".offer-tag",
-            ".discount-badge",
-        ]:
-            node = tree.css_first(selector)
-            if node:
-                result.promo_label = node.text(strip=True)[:200]
-                break
-
+        # ── Status ────────────────────────────────────────────
         if result.price is None:
             result.scrape_status = "failed"
 
