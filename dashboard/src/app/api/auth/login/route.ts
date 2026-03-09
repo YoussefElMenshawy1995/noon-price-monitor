@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import crypto from "crypto";
 
-function getSessionToken(): string {
+async function getSessionToken(): Promise<string> {
   const secret = process.env.AUTH_SECRET || "noon-price-monitor-default-secret";
-  return crypto.createHash("sha256").update(secret).digest("hex").slice(0, 32);
+  const encoder = new TextEncoder();
+  const data = encoder.encode(secret);
+  const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return hashHex.slice(0, 32);
 }
 
 export async function POST(request: NextRequest) {
@@ -21,7 +25,7 @@ export async function POST(request: NextRequest) {
   }
 
   if (email === validEmail && password === validPassword) {
-    const token = getSessionToken();
+    const token = await getSessionToken();
 
     const cookieStore = await cookies();
     cookieStore.set("pm_session", token, {
