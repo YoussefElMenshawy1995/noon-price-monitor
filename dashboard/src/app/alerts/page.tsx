@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
-import { getAlerts } from "@/lib/sample-data";
+import { useState, useEffect } from "react";
+import * as api from "@/lib/api";
+import * as sample from "@/lib/sample-data";
 import { formatSAR } from "@/lib/utils";
 
 const alertTypeLabels: Record<string, { label: string; color: string; bg: string }> = {
@@ -20,8 +21,12 @@ const competitorColors: Record<string, string> = {
 };
 
 export default function AlertsPage() {
-  const allAlerts = getAlerts();
+  const [allAlerts, setAllAlerts] = useState<sample.Alert[]>(sample.getAlerts());
   const [filter, setFilter] = useState<string>("");
+
+  useEffect(() => {
+    api.getAlerts().then(setAllAlerts);
+  }, []);
 
   const filtered = filter ? allAlerts.filter((a) => a.alertType === filter) : allAlerts;
   const unreadCount = allAlerts.filter((a) => !a.isRead).length;
@@ -65,7 +70,7 @@ export default function AlertsPage() {
       {/* Alert list */}
       <div className="space-y-3">
         {filtered.map((alert) => {
-          const meta = alertTypeLabels[alert.alertType];
+          const meta = alertTypeLabels[alert.alertType] || { label: alert.alertType, color: "text-gray-700", bg: "bg-gray-100" };
           return (
             <div
               key={alert.id}

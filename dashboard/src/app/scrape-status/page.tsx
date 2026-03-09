@@ -1,6 +1,8 @@
 "use client";
 
-import { getScrapeRuns } from "@/lib/sample-data";
+import { useState, useEffect } from "react";
+import * as api from "@/lib/api";
+import * as sample from "@/lib/sample-data";
 import { formatDuration } from "@/lib/utils";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Legend } from "recharts";
 
@@ -11,7 +13,11 @@ const competitorColors: Record<string, string> = {
 };
 
 export default function ScrapeStatusPage() {
-  const runs = getScrapeRuns();
+  const [runs, setRuns] = useState<sample.ScrapeRun[]>(sample.getScrapeRuns());
+
+  useEffect(() => {
+    api.getScrapeRuns().then(setRuns);
+  }, []);
 
   // Group by date for chart
   const dateMap = new Map<string, { date: string; amazon: number; ninja: number; lulu: number }>();

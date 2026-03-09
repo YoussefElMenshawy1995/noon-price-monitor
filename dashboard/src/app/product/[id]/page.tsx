@@ -1,7 +1,8 @@
 "use client";
 
-import { use } from "react";
-import { getProduct, getPriceHistory } from "@/lib/sample-data";
+import { useState, useEffect, use } from "react";
+import * as api from "@/lib/api";
+import * as sample from "@/lib/sample-data";
 import { formatSAR } from "@/lib/utils";
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid, Legend,
@@ -10,8 +11,18 @@ import Link from "next/link";
 
 export default function ProductDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const product = getProduct(parseInt(id));
-  const history = getPriceHistory(parseInt(id));
+  const [product, setProduct] = useState<sample.Product | null>(sample.getProduct(parseInt(id)) || null);
+  const [history, setHistory] = useState<sample.PriceHistory[]>(sample.getPriceHistory(parseInt(id)));
+
+  useEffect(() => {
+    Promise.all([
+      api.getProduct(id),
+      api.getPriceHistory(id),
+    ]).then(([p, h]) => {
+      if (p) setProduct(p);
+      setHistory(h);
+    });
+  }, [id]);
 
   if (!product) {
     return <div className="text-center py-20 text-gray-500">Product not found</div>;

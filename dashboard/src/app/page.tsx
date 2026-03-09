@@ -1,6 +1,8 @@
 "use client";
 
-import { getStats, getPositionTrend, getCategoryBreakdown, getProducts } from "@/lib/sample-data";
+import { useState, useEffect } from "react";
+import * as api from "@/lib/api";
+import * as sample from "@/lib/sample-data";
 import { formatSAR } from "@/lib/utils";
 import {
   PieChart, Pie, Cell, ResponsiveContainer, LineChart, Line,
@@ -9,10 +11,26 @@ import {
 import Link from "next/link";
 
 export default function OverviewPage() {
-  const stats = getStats();
-  const trend = getPositionTrend();
-  const categories = getCategoryBreakdown();
-  const products = getProducts();
+  const [stats, setStats] = useState(sample.getStats());
+  const [trend, setTrend] = useState(sample.getPositionTrend());
+  const [categories, setCategories] = useState(sample.getCategoryBreakdown());
+  const [products, setProducts] = useState<sample.Product[]>(sample.getProducts());
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    Promise.all([
+      api.getStats(),
+      api.getPositionTrend(),
+      api.getCategoryBreakdown(),
+      api.getProducts(),
+    ]).then(([s, t, c, p]) => {
+      setStats(s);
+      setTrend(t);
+      setCategories(c);
+      setProducts(p);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
 
   const pieData = [
     { name: "Noon Cheapest", value: stats.noonCheapestPct, color: "#10B981" },
@@ -39,19 +57,26 @@ export default function OverviewPage() {
     })
     .sort((a, b) => b.gapPct - a.gapPct);
 
+  const lastUpdated = new Date().toLocaleString("en-US", {
+    month: "long", day: "numeric", year: "numeric",
+    hour: "numeric", minute: "2-digit", hour12: true, timeZone: "Asia/Riyadh",
+  });
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Dashboard Overview</h1>
-          <p className="text-sm text-gray-500 mt-1">Last updated: March 9, 2026 at 6:00 AM AST</p>
+          <p className="text-sm text-gray-500 mt-1">Last updated: {lastUpdated} AST</p>
         </div>
-        <span className="px-3 py-1 bg-green-100 text-green-700 text-sm font-medium rounded-full">Live</span>
+        <span className={`px-3 py-1 text-sm font-medium rounded-full ${loading ? "bg-yellow-100 text-yellow-700" : "bg-green-100 text-green-700"}`}>
+          {loading ? "Loading..." : "Live"}
+        </span>
       </div>
 
       <div className="grid grid-cols-4 gap-4 mb-6">
-        <KpiCard label="Total SKUs" value={stats.totalProducts.toLocaleString()} sub="12,234 unique products" />
-        <KpiCard label="Scrape Success Rate" value={`${stats.scrapeSuccessRate}%`} sub="~15,700 URLs scraped today" color="text-green-600" />
+        <KpiCard label="Total SKUs" value={stats.totalProducts.toLocaleString()} sub={`${stats.totalProducts.toLocaleString()} unique products`} />
+        <KpiCard label="Scrape Success Rate" value={`${stats.scrapeSuccessRate}%`} sub={`${stats.trackedProducts.toLocaleString()} URLs scraped`} color="text-green-600" />
         <KpiCard label="Noon is Cheapest" value={`${stats.noonCheapestPct}%`} sub="of tracked products" color="text-amber-600" />
         <KpiCard label="Undercut by Competitors" value={`${stats.noonUndercutPct}%`} sub={`Avg gap: ${stats.avgGapPct}%`} color="text-red-600" />
       </div>

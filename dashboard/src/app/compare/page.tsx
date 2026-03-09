@@ -1,16 +1,24 @@
 "use client";
 
-import { useState } from "react";
-import { getProducts, getCategories } from "@/lib/sample-data";
+import { useState, useEffect } from "react";
+import * as api from "@/lib/api";
+import * as sample from "@/lib/sample-data";
 import { formatSAR } from "@/lib/utils";
 import Link from "next/link";
 
 export default function ComparePage() {
-  const allProducts = getProducts();
-  const categories = getCategories();
+  const [allProducts, setAllProducts] = useState<sample.Product[]>(sample.getProducts());
+  const [categories, setCategories] = useState<string[]>(sample.getCategories());
   const [search, setSearch] = useState("");
   const [category, setCategory] = useState("");
   const [showTopOnly, setShowTopOnly] = useState(false);
+
+  useEffect(() => {
+    Promise.all([api.getProducts(), api.getCategories()]).then(([p, c]) => {
+      setAllProducts(p);
+      setCategories(c);
+    });
+  }, []);
 
   const filtered = allProducts.filter((p) => {
     if (search && !p.title.toLowerCase().includes(search.toLowerCase()) && !p.sku.toLowerCase().includes(search.toLowerCase())) return false;
@@ -108,7 +116,7 @@ export default function ComparePage() {
                         <span className={gap > 0 ? "text-red-600" : "text-green-600"}>
                           {gap > 0 ? "+" : ""}{gap.toFixed(1)}%
                         </span>
-                      ) : "—"}
+                      ) : "\u2014"}
                     </td>
                   </tr>
                 );
@@ -125,7 +133,7 @@ function PriceCell({ price, inStock, promo, noonPrice }: { price: number | null;
   if (price === null) {
     return (
       <td className="px-4 py-3 text-right text-gray-300 text-xs">
-        {inStock ? "—" : "OOS"}
+        {inStock ? "\u2014" : "OOS"}
       </td>
     );
   }
