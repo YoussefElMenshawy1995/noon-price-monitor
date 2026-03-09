@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -14,6 +14,13 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+
+  async function handleLogout() {
+    await fetch("/api/auth/logout", { method: "POST" });
+    router.push("/login");
+    router.refresh();
+  }
 
   return (
     <aside className="w-64 bg-gray-900 text-white min-h-screen flex flex-col">
@@ -45,7 +52,13 @@ export default function Sidebar() {
       </nav>
       <div className="p-4 border-t border-gray-700">
         <p className="text-xs text-gray-500">Riyadh, Saudi Arabia</p>
-        <p className="text-xs text-gray-500">Daily scrape at 6:00 AM AST</p>
+        <p className="text-xs text-gray-500 mb-3">Daily scrape at 6:00 AM AST</p>
+        <button
+          onClick={handleLogout}
+          className="w-full text-left text-xs text-gray-400 hover:text-red-400 transition-colors"
+        >
+          Sign Out
+        </button>
       </div>
     </aside>
   );
